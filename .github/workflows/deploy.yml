@@ -10,19 +10,23 @@ jobs:
     name: Terraform Apply
     runs-on: ubuntu-latest
 
-  defaults:
-  # run:
-    # working-directory: terraform
+    # ✅ Defaults must be inside the job
+    defaults:
+      run:
+        working-directory: terraform  # Path where Terraform files exist
 
     steps:
+      # Step 1: Checkout code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      # Step 2: Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.6.0
 
+      # Step 3: Configure AWS Credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -30,14 +34,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      # Step 4: Terraform Init
       - name: Terraform Init
         run: terraform init
 
+      # Step 5: Terraform Validate
       - name: Terraform Validate
         run: terraform validate
 
+      # Step 6: Terraform Plan
       - name: Terraform Plan
-        run: terraform plan
+        run: terraform plan -out=tfplan
 
+      # Step 7: Terraform Apply (only on main branch)
       - name: Terraform Apply
-        run: terraform apply -auto-approve
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
