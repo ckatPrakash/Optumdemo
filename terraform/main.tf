@@ -1,84 +1,47 @@
-provider "aws" {
-  region = var.aws_region
-}
+name: Terraform Destroy
 
-variable "aws_region" {
-  default = "us-west-2"
-}
+on:
+  workflow_dispatch:  # Trigger manually from GitHub Actions UI
 
-# Create VPC
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-  tags = {
-    Name = "main-vpc"
-  }
-}
+jobs:
+  terraform-destroy:
+    name: Destroy Infrastructure
+    runs-on: ubuntu-latest
 
-# Create Subnet
-resource "aws_subnet" "main" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-west-2a"
-  map_public_ip_on_launch = true
+    env:
+      AWS_REGION: us-west-2
 
-  tags = {
-    Name = "main-subnet"
-  }
-}
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-# Create Internet Gateway
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-  tags = {
-    Name = "main-igw"
-  }
-}
+      # Step 2: Set up Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5  # Use your version
 
-# Create Security Group
-resource "aws_security_group" "vpce_sg" {
-  name        = "vpce-sg"
-  description = "Security group for VPC Endpoint"
-  vpc_id      = aws_vpc.main.id
+      # Step 3: Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+      # Step 4: Initialize Terraform
+      - name: Terraform Init
+        run: terraform init
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+      # Step 5: Validate Terraform Files
+      - name: Terraform Validate
+        run: terraform validate
 
-  tags = {
-    Name = "vpce-sg"
-  }
-}
+      # Step 6: Destroy Infrastructure
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
 
-# Get Default Route Table
-data "aws_route_table" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [aws_vpc.main.id]
-  }
-  filter {
-    name   = "association.main"
-    values = ["true"]
-  }
-}
-
-# Create VPC Endpoint for S3
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${var.aws_region}.s3"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = [data.aws_route_table.default.id]
-
-  tags = {
-    Name = "s3-endpoint"
-  }
-}
+      # Step 7: Clean up .terraform cache (optional but recommended)
+      - name: Cleanup Terraform Cache
+        run: rm -rf .terraform
